@@ -12,8 +12,6 @@ __pycache__/
 htmlcov/
 *.sqlite
 *.db
-models/
-*.onnx
 *.pt
 *.pth
 *.bin
