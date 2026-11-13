@@ -23,6 +23,7 @@ RUN python -m pip install --upgrade pip && python -m pip install -r requirements
 COPY --chown=app:app app ./app
 COPY --chown=app:app alembic ./alembic
 COPY --chown=app:app alembic.ini pyproject.toml README.md ./
+COPY --chown=app:app models/face ./models/face
 COPY --from=frontend-build --chown=app:app /build/frontend/dist ./frontend/dist
 USER app
 EXPOSE 8000
