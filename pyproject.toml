@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "smartattend-ai-backend"
+version = "1.0.0"
+description = "FastAPI backend for an independently deployed school attendance system"
+requires-python = ">=3.11,<3.14"
+readme = "README.md"
+dynamic = ["dependencies"]
+
+[tool.setuptools]
+packages = { find = { include = ["app*"] } }
+
+[tool.setuptools.dynamic]
+dependencies = { file = ["requirements-prod.txt"] }
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers"
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = ["integration: tests that need a separately provisioned PostgreSQL database"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = ["S101", "B008"]
+
+[tool.mypy]
+python_version = "3.11"
+plugins = ["pydantic.mypy"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+no_implicit_optional = true
+check_untyped_defs = true
+
+[tool.coverage.run]
+branch = true
+source = ["app"]
+omit = ["app/cli.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+fail_under = 25

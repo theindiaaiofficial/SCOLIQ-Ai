@@ -1,0 +1,87 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --brand-primary: #3157c8;
+  --brand-primary-contrast: #ffffff;
+  --brand-accent: #17a38b;
+  --page: #f4f6fa;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-muted: #f7f8fb;
+  --text: #172033;
+  --text-muted: #687387;
+  --text-soft: #8a94a6;
+  --border: #e5e9f0;
+  --border-strong: #d7deea;
+  --success: #16845d;
+  --success-bg: #e8f6ef;
+  --warning: #a76612;
+  --warning-bg: #fff5e5;
+  --danger: #bd3b4b;
+  --danger-bg: #fff0f1;
+  --info: #315f9c;
+  --info-bg: #edf4ff;
+  --sidebar-width: 264px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --shadow-sm: 0 2px 8px rgb(19 34 66 / 4%);
+  --shadow-md: 0 12px 36px rgb(19 34 66 / 8%);
+  --shadow-lg: 0 24px 64px rgb(19 34 66 / 16%);
+  --focus: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 22%, transparent);
+  --space: 1;
+  --motion-fast: 140ms;
+  --motion: 220ms;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #101622;
+  --surface: #171f2d;
+  --surface-raised: #1d2737;
+  --surface-muted: #202b3b;
+  --text: #edf2fa;
+  --text-muted: #a3afc1;
+  --text-soft: #7f8ba0;
+  --border: #2a374a;
+  --border-strong: #3a4960;
+  --success: #65d2a4;
+  --success-bg: #17382e;
+  --warning: #f0bd72;
+  --warning-bg: #3b2e1d;
+  --danger: #ff8994;
+  --danger-bg: #3e2029;
+  --info: #94bdff;
+  --info-bg: #1d304a;
+  --shadow-sm: 0 2px 8px rgb(0 0 0 / 14%);
+  --shadow-md: 0 12px 36px rgb(0 0 0 / 24%);
+  --shadow-lg: 0 24px 64px rgb(0 0 0 / 38%);
+}
+
+:root[data-radius="sharp"] { --radius-sm: 4px; --radius-md: 7px; --radius-lg: 10px; --radius-xl: 14px; }
+:root[data-radius="balanced"] { --radius-sm: 7px; --radius-md: 11px; --radius-lg: 16px; --radius-xl: 20px; }
+:root[data-radius="soft"] { --radius-sm: 10px; --radius-md: 15px; --radius-lg: 22px; --radius-xl: 28px; }
+:root[data-density="compact"] { --space: .82; }
+:root[data-density="comfortable"] { --space: 1; }
+:root[data-motion="off"] { --motion-fast: 0ms; --motion: 0ms; }
+:root[data-motion="expressive"] { --motion-fast: 190ms; --motion: 340ms; }
+:root[data-profile="basic"] { --shadow-sm: none; --shadow-md: none; --shadow-lg: none; }
+:root[data-profile="premium"] { --shadow-sm: 0 3px 12px rgb(19 34 66 / 6%); --shadow-md: 0 16px 42px rgb(19 34 66 / 10%); --shadow-lg: 0 28px 72px rgb(19 34 66 / 17%); }
+:root[data-profile="premium"] .school-masthead, :root[data-profile="premium"] .teacher-masthead { box-shadow: var(--shadow-sm); }
+:root[data-profile="basic"] .school-masthead, :root[data-profile="basic"] .teacher-masthead { background: var(--surface); }
+:root[data-cards="flat"] .card { box-shadow: none; border-color: transparent; }
+:root[data-cards="outlined"] .card { box-shadow: none; }
+:root[data-cards="elevated"] .card { box-shadow: var(--shadow-sm); }
+:root[data-sidebar="solid"] .sidebar { background: var(--surface-raised); border-right-color: var(--border-strong); }
+:root[data-sidebar="subtle"] .sidebar { background: var(--surface-muted); }
+:root[data-sidebar="brand-tinted"] .sidebar { background: color-mix(in srgb, var(--brand-primary) 6%, var(--surface)); }
+:root[data-heading="editorial"] h1, :root[data-heading="editorial"] .school-masthead h1 { letter-spacing: -.055em; font-family: Georgia, "Times New Roman", serif; font-weight: 600; }
+:root[data-background="soft-tint"] body, :root[data-background="tint"] body { background-image: radial-gradient(ellipse at 85% 0%, color-mix(in srgb, var(--brand-primary) 7%, transparent), transparent 38%); }
+:root[data-background="plain"] body { background-image: none; }
+:root[data-background="gradient"] body { background-image: linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 5%, var(--page)), var(--page) 45%, color-mix(in srgb, var(--brand-accent) 4%, var(--page))); }
+
+:root[data-logo-placement="above"] .school-masthead, :root[data-logo-placement="above"] .teacher-brand, :root[data-logo-placement="above"] .auth-brand { flex-direction: column; align-items: flex-start; }
+:root[data-logo-placement="above"] .teacher-brand > div { flex: none; width: 100%; }

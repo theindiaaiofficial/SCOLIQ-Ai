@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smartattend-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smartattend
+      POSTGRES_USER: smartattend
+      POSTGRES_PASSWORD: smartattend_local_only
+    ports:
+      - "54329:5432"
+    volumes:
+      - smartattend_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smartattend -d smartattend"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  smartattend_pgdata:
