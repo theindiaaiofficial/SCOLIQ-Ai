@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "SmartAttend AI Backend",
+    "title": "SCOLIQ AI Backend",
     "description": "School-isolated attendance API and web platform.",
     "version": "1.0.0"
   },

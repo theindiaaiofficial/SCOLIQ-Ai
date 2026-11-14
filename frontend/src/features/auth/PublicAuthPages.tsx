@@ -12,7 +12,7 @@ import { BrandMark, Button, LoadingState, Notice, TextField } from '../../compon
 function AuthFrame({ eyebrow, title, description, children, portal }: { eyebrow: string; title: string; description: string; children: React.ReactNode; portal: 'Principal' | 'Teacher' }) {
   const { brand } = useBrand();
   return <main className="auth-page"><div className="auth-orbit auth-orbit-one" /><div className="auth-orbit auth-orbit-two" />
-    <div className="auth-wrap"><header className="auth-brand"><BrandMark name={brand.school_name} logoUrl={brand.logo_url} size="lg" />{brand.branding.logo_with_school_name ? <div><strong>{brand.school_name}</strong><span>SmartAttend AI</span></div> : null}<span className="auth-portal-tag">{brand.branding.logo_with_school_name ? `${portal} portal` : `${brand.school_name} · ${portal} portal`}</span></header>
+    <div className="auth-wrap"><header className="auth-brand"><BrandMark name={brand.school_name} logoUrl={brand.logo_url} size="lg" />{brand.branding.logo_with_school_name ? <div><strong>{brand.school_name}</strong><span>SCOLIQ AI</span></div> : null}<span className="auth-portal-tag">{brand.branding.logo_with_school_name ? `${portal} portal` : `${brand.school_name} · ${portal} portal`}</span></header>
       <section className="auth-card"><span className="eyebrow">{eyebrow}</span><h1>{title}</h1><p className="auth-description">{description}</p>{children}</section>
       <footer className="auth-footer"><ShieldCheck size={14} /> Secure school workspace · Your school’s data stays within this installation</footer>
     </div>
@@ -75,8 +75,8 @@ export function TeacherLoginPage() {
     <form className="stack-form" onSubmit={handleLogin}>
       <TextField label="School email or mobile number" autoComplete="username webauthn" value={identifier} onChange={(e) => setIdentifier(e.target.value)} required />
       <Button type="submit" block loading={busy} disabled={!identifier.trim() || !webAuthnAvailable}><Fingerprint size={17} /> Continue with passkey</Button>
-      {!webAuthnAvailable ? <Notice tone="warning">Passkeys are not available in this browser or context. Use HTTPS or localhost with a supported browser.</Notice> : <div className="passkey-note"><KeyRound size={16} /><span>Your passkey’s private key stays protected by your device. SmartAttend never receives your fingerprint or face-unlock data.</span></div>}
-      <div className="auth-divider"><span>New to SmartAttend?</span></div>
+      {!webAuthnAvailable ? <Notice tone="warning">Passkeys are not available in this browser or context. Use HTTPS or localhost with a supported browser.</Notice> : <div className="passkey-note"><KeyRound size={16} /><span>Your passkey’s private key stays protected by your device. SCOLIQ AI never receives your fingerprint or face-unlock data.</span></div>}
+      <div className="auth-divider"><span>New to SCOLIQ AI?</span></div>
       <Link className="button button-secondary button-block" to="/teacher/request-access"><UserRoundPlus size={16} /> Request teacher access</Link>
       <Link className="auth-secondary-link" to="/teacher/activate">Already approved? Enter activation code <ArrowRight size={14} /></Link>
     </form>

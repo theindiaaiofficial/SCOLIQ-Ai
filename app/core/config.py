@@ -12,7 +12,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_name: str = "SmartAttend AI Backend"
+    app_name: str = "SCOLIQ AI Backend"
     app_env: Literal["development", "test", "production"] = "development"
     app_base_url: str = "http://localhost:8000"
     api_v1_prefix: str = "/api/v1"
@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     webauthn_rp_id: str = "localhost"
     webauthn_origin: str = "http://localhost:5173"
-    webauthn_rp_name: str = "SmartAttend AI"
+    webauthn_rp_name: str = "SCOLIQ AI"
     webauthn_challenge_ttl_seconds: int = Field(default=300, ge=60, le=900)
 
     face_provider: Literal["opencv_sface", "mobilefacenet", "manual", "fake"] = "manual"

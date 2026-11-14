@@ -1,1 +1,1 @@
-"""SmartAttend AI backend package."""
+"""SCOLIQ AI backend package."""

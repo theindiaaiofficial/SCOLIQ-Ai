@@ -1,4 +1,4 @@
-SmartAttend AI - packaged project structure
+SCOLIQ AI - packaged project structure
 
 .dockerignore
 .env.example

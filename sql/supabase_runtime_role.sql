@@ -1,4 +1,4 @@
--- SmartAttend AI: backend-only Supabase/PostgreSQL role and RLS setup.
+-- SCOLIQ AI: backend-only Supabase/PostgreSQL role and RLS setup.
 -- Run as the Supabase project postgres/schema-owner role AFTER `alembic upgrade head`.
 -- Replace the placeholder password with a newly generated password before execution.
 -- Put that same value in Render DATABASE_URL (URL-encode special characters).
@@ -20,7 +20,7 @@ ALTER ROLE smartattend_runtime SET search_path = public;
 GRANT CONNECT ON DATABASE postgres TO smartattend_runtime;
 GRANT USAGE ON SCHEMA public TO smartattend_runtime;
 
--- The browser-facing Supabase roles must never read or write SmartAttend records.
+-- The browser-facing Supabase roles must never read or write SCOLIQ AI records.
 REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
 

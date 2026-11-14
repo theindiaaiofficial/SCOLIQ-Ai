@@ -31,7 +31,7 @@ services:
       - key: WEBAUTHN_ORIGIN
         sync: false
       - key: WEBAUTHN_RP_NAME
-        value: SmartAttend AI
+        value: SCOLIQ AI
       - key: CORS_ALLOWED_ORIGINS
         sync: false
       - key: FACE_PROVIDER

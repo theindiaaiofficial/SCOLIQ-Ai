@@ -65,7 +65,7 @@ function Sidebar({ children, role, onNavigate }: { children?: ReactNode; role: '
     <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}>
       <div className="sidebar-brand"><BrandMark name={brand.school_name} logoUrl={brand.logo_url} size="lg" />{brand.branding.logo_with_school_name ? <div><strong>{brand.school_name}</strong><span>{role === 'admin' ? 'Principal workspace' : 'Teacher workspace'}</span></div> : null}<button className="icon-button sidebar-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={18} /></button></div>
       {nav}
-      <div className="sidebar-footer"><div className="sidebar-footer-mark"><Building2 size={15} /><span>Independent school workspace</span></div><small>SmartAttend AI</small></div>
+      <div className="sidebar-footer"><div className="sidebar-footer-mark"><Building2 size={15} /><span>Independent school workspace</span></div><small>SCOLIQ AI</small></div>
     </aside>
     {mobileOpen ? <button className="sidebar-overlay" aria-label="Close navigation overlay" onClick={() => setMobileOpen(false)} /> : null}
     {children}
@@ -93,7 +93,7 @@ export function AdminLayout({ user }: { user: Principal }) {
         </div>
         <Outlet />
       </main>
-      <footer className="portal-footer"><span>SmartAttend AI</span><span>One secure workspace for your school</span></footer>
+      <footer className="portal-footer"><span>SCOLIQ AI</span><span>One secure workspace for your school</span></footer>
     </div>
   </div>;
 }
@@ -138,7 +138,7 @@ export function TeacherLayout({ user }: { user: TeacherIdentity }) {
           <div className="teacher-masthead"><div className="teacher-brand"><BrandMark name={brand.school_name} logoUrl={brand.logo_url} size="lg"/><div><span className="eyebrow">{brand.school_name}</span><h1>Good day, {user.full_name.split(' ')[0]}</h1><p>{current ? `Grade ${current.grade} · Section ${current.section} · ${current.academic_year}` : 'Your teacher workspace'}</p></div></div><div className="masthead-actions"><span className="live-dot" /> Teacher portal</div></div>
           <Outlet />
         </main>
-        <footer className="portal-footer"><span>SmartAttend AI</span><span>{brand.school_name} · Teacher workspace</span></footer>
+        <footer className="portal-footer"><span>SCOLIQ AI</span><span>{brand.school_name} · Teacher workspace</span></footer>
       </div>
     </div>
   </ClassScopeContext.Provider>;

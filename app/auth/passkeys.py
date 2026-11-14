@@ -45,7 +45,7 @@ def create_registration_options(db: Session, user_id, settings) -> str:
         rp_name=settings.webauthn_rp_name,
         user_id=user_id.bytes,
         user_name=str(user_id),
-        user_display_name="SmartAttend AI Teacher",
+        user_display_name="SCOLIQ AI Teacher",
         authenticator_selection=AuthenticatorSelectionCriteria(
             resident_key=ResidentKeyRequirement.PREFERRED,
             user_verification=UserVerificationRequirement.REQUIRED,

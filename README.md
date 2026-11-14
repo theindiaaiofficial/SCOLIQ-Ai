@@ -1,18 +1,18 @@
-# SmartAttend AI
+# SCOLIQ AI
 
 **A configurable school attendance management platform**
 
-SmartAttend AI is a web-based attendance platform designed to make school and college attendance more organized, accessible, and easier to manage. It brings key school-level workflows into one Principal dashboard and gives teachers a dedicated workspace for their assigned classes.
+SCOLIQ AI is a web-based attendance platform designed to make school and college attendance more organized, accessible, and easier to manage. It brings key school-level workflows into one Principal dashboard and gives teachers a dedicated workspace for their assigned classes.
 
 The project is intended to be reusable by different schools and colleges. Each institution can deploy its own isolated installation, connect its own PostgreSQL/Supabase database, and customize the platform's school identity and visual appearance.
 
-> **Deployment model:** SmartAttend AI currently uses a separate application deployment and database for each school. It is not one centrally hosted, shared multi-school SaaS database. A school adopting the project deploys its own instance and manages its own data and configuration.
+> **Deployment model:** SCOLIQ AI currently uses a separate application deployment and database for each school. It is not one centrally hosted, shared multi-school SaaS database. A school adopting the project deploys its own instance and manages its own data and configuration.
 
 ---
 
 ## Why I am building it
 
-Traditional attendance workflows can involve disconnected records, manual coordination, and limited visibility for school leadership. SmartAttend AI aims to bring these workflows into a single online system so that:
+Traditional attendance workflows can involve disconnected records, manual coordination, and limited visibility for school leadership. SCOLIQ AI aims to bring these workflows into a single online system so that:
 
 - The Principal can oversee the school's classes, teachers, students, and attendance from one dashboard.
 - Teachers can manage their assigned class workflows from a dedicated portal.
@@ -83,7 +83,7 @@ The frontend is built into static assets and served by FastAPI in the same-origi
 
 ## Security and privacy approach
 
-SmartAttend AI is intended for a school environment and may handle information about minors. Privacy and consent must therefore be treated as core operational requirements, not optional extras.
+SCOLIQ AI is intended for a school environment and may handle information about minors. Privacy and consent must therefore be treated as core operational requirements, not optional extras.
 
 The current implementation includes controls such as:
 
@@ -140,7 +140,7 @@ SmartAttend-AI/
 
 ```powershell
 # Enter the project directory.
-cd SmartAttend_AI_Platform
+cd SmartAttend-Ai
 
 # Create and activate a virtual environment.
 py -3.12 -m venv .venv
@@ -266,7 +266,7 @@ npm test
 
 ## About the creator
 
-**Ramu Jaiswal**, known online as **Mahesh Editor**, is the creator of SmartAttend AI. He is a **Class XI-B2** student at **Shree Gandhi Smarak Inter College, Hata, Uttar Pradesh, India**, and has around **three years of video-editing experience**.
+**Ramu Jaiswal**, known online as **Mahesh Editor**, is the creator of SCOLIQ AI. He is a **Class XI-B2** student at **Shree Gandhi Smarak Inter College, Hata, Uttar Pradesh, India**, and has around **three years of video-editing experience**.
 
 His learning approach is self-directed: he explores topics through AI tools, internet research, practical experiments, testing, and iteration. He is interested in adapting his skills across multiple domains, building useful products, and contributing in the long term to India's progress in advanced AI and AGI technologies.
 
@@ -274,7 +274,7 @@ He has also launched **AttachAi Assistant**, a separate platform designed to pro
 
 ### How this project was created
 
-SmartAttend AI is an independently guided, AI-assisted project. The initial idea, problem selection, product direction, and intended outcomes came from Ramu Jaiswal. He uses AI as a development collaborator to help refine raw ideas into requirements, plan architecture, understand implementation steps, develop prompts, generate and revise code, investigate errors, and improve the system through repeated testing and feedback.
+SCOLIQ AI is an independently guided, AI-assisted project. The initial idea, problem selection, product direction, and intended outcomes came from Ramu Jaiswal. He uses AI as a development collaborator to help refine raw ideas into requirements, plan architecture, understand implementation steps, develop prompts, generate and revise code, investigate errors, and improve the system through repeated testing and feedback.
 
 **ChatGPT contributed substantially** to clarifying the concept, shaping the architecture, prompt engineering, coding assistance, debugging, and iterative implementation. Ramu guided the work, explored and tested the results, identified issues and gaps, and directed further improvements. The project is not presented as work completed by a human development team; its workflow is centered on the creator working with AI tools.
 
@@ -290,4 +290,4 @@ No `LICENSE` file was present in the supplied project archive. A public GitHub r
 
 ---
 
-*SmartAttend AI — making school attendance more organized, adaptable, and accessible.*
+*SCOLIQ AI — making school attendance more organized, adaptable, and accessible.*
