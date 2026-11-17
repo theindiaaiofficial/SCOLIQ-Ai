@@ -642,3 +642,19 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
   .live-camera-progress { bottom: max(108px, calc(env(safe-area-inset-bottom) + 94px)); }
   .consent-permission-cell { align-items: flex-start; flex-direction: column; }
 }
+
+/* School operations and sequential attendance verification */
+.setting-toggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.setting-toggle > span { display: flex; flex-direction: column; gap: 4px; }
+.setting-toggle strong { color: var(--text); font-size: .86rem; }
+.setting-toggle small { color: var(--text-muted); font-size: .76rem; }
+.setting-toggle input { width: 20px; height: 20px; accent-color: var(--brand-primary); }
+.current-student-panel, .manual-verify-panel { display: flex; flex-direction: column; gap: 12px; padding: 15px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.current-student-panel h3, .manual-verify-panel h3 { margin: 0; }
+.current-student-panel p, .manual-verify-panel p { margin: 0; color: var(--text-muted); font-size: .8rem; }
+.manual-search-results { display: flex; flex-direction: column; gap: 7px; max-height: 230px; overflow: auto; }
+.manual-search-result { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 11px 12px; text-align: left; color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-muted); cursor: pointer; }
+.manual-search-result span { color: var(--text-muted); font-size: .78rem; }
+.manual-search-result.selected { border-color: var(--brand-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-primary) 14%, transparent); }
+.manual-selected-profile { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.manual-selected-profile h4 { margin: 0; }

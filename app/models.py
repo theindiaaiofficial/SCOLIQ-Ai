@@ -165,6 +165,24 @@ class AppSession(Base):
     )
 
 
+class PrincipalPasswordResetCode(Base):
+    __tablename__ = "principal_password_reset_codes"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id", ondelete="CASCADE"))
+    email_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    ip_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("attempts >= 0 AND attempts <= 5", name="ck_password_reset_attempts"),
+        Index("ix_password_reset_email_created", "email_hash", "created_at"),
+        Index("ix_password_reset_ip_created", "ip_hash", "created_at"),
+    )
+
+
 class ClassRecord(Base):
     __tablename__ = "classes"
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -204,6 +222,10 @@ class Student(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
     school_student_code: Mapped[str | None] = mapped_column(String(64), unique=True)
     full_name: Mapped[str] = mapped_column(String(180), nullable=False)
+    father_name: Mapped[str | None] = mapped_column(String(180))
+    mother_name: Mapped[str | None] = mapped_column(String(180))
+    guardian_phone: Mapped[str | None] = mapped_column(String(32))
+    alternate_guardian_phone: Mapped[str | None] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="ACTIVE")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
@@ -293,6 +315,21 @@ class AttendanceScanEvent(Base):
         CheckConstraint("result_status IN ('MATCHED', 'DUPLICATE', 'NO_MATCH', 'AMBIGUOUS', 'POOR_QUALITY', 'PROVIDER_UNAVAILABLE', 'ALREADY_REVIEWED')", name="ck_scan_event_status"),
         CheckConstraint("score IS NULL OR (score >= -1 AND score <= 1)", name="ck_scan_event_score_range"),
         Index("ix_scan_events_session_time", "session_id", "scanned_at"),
+    )
+
+
+class AttendanceVerificationAttempt(Base):
+    __tablename__ = "attendance_verification_attempts"
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("attendance_sessions.id", ondelete="CASCADE"), nullable=False)
+    enrollment_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("student_class_enrollments.id", ondelete="CASCADE"), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_utc, onupdate=now_utc, nullable=False)
+    __table_args__ = (
+        UniqueConstraint("session_id", "enrollment_id", name="uq_face_attempt_session_enrollment"),
+        CheckConstraint("attempt_count >= 0 AND attempt_count <= 5", name="ck_face_attempt_count"),
+        Index("ix_face_attempt_session", "session_id"),
     )
 
 

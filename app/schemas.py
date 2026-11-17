@@ -24,6 +24,26 @@ class AdminLoginRequest(APIModel):
     password: str = Field(min_length=1, max_length=256)
 
 
+class PasswordResetRequest(APIModel):
+    email: EmailStr
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> EmailStr:
+        return str(value).lower()
+
+
+class PasswordResetConfirmRequest(APIModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str = Field(min_length=12, max_length=256)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> EmailStr:
+        return str(value).lower()
+
+
 class PasswordChangeRequest(APIModel):
     current_password: str = Field(min_length=1, max_length=256)
     new_password: str = Field(min_length=12, max_length=256)
@@ -86,13 +106,41 @@ class StudentCreateRequest(APIModel):
     full_name: str = Field(min_length=2, max_length=180)
     roll_number: str = Field(min_length=1, max_length=32)
     school_student_code: str | None = Field(default=None, max_length=64)
+    father_name: str | None = Field(default=None, max_length=180)
+    mother_name: str | None = Field(default=None, max_length=180)
+    guardian_phone: str | None = Field(default=None, max_length=32)
+    alternate_guardian_phone: str | None = Field(default=None, max_length=32)
     consent_status: Literal["PENDING"] = "PENDING"
+
+    @field_validator("guardian_phone", "alternate_guardian_phone")
+    @classmethod
+    def clean_guardian_phone(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        digits = "".join(char for char in value if char.isdigit())
+        if not 7 <= len(digits) <= 15:
+            raise ValueError("Guardian phone must contain 7 to 15 digits")
+        return ("+" if value.strip().startswith("+") else "") + digits
 
 
 class StudentUpdateRequest(APIModel):
     full_name: str | None = Field(default=None, min_length=2, max_length=180)
     roll_number: str | None = Field(default=None, min_length=1, max_length=32)
     status: Literal["ACTIVE", "TRANSFERRED", "INACTIVE"] | None = None
+    father_name: str | None = Field(default=None, max_length=180)
+    mother_name: str | None = Field(default=None, max_length=180)
+    guardian_phone: str | None = Field(default=None, max_length=32)
+    alternate_guardian_phone: str | None = Field(default=None, max_length=32)
+
+    @field_validator("guardian_phone", "alternate_guardian_phone")
+    @classmethod
+    def clean_guardian_phone(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        digits = "".join(char for char in value if char.isdigit())
+        if not 7 <= len(digits) <= 15:
+            raise ValueError("Guardian phone must contain 7 to 15 digits")
+        return ("+" if value.strip().startswith("+") else "") + digits
 
 
 class ConsentGrantRequest(APIModel):
@@ -161,6 +209,11 @@ def validate_school_logo_url(value: str | None) -> str | None:
     return value
 
 
+class SchoolOperationsSettings(APIModel):
+    student_information_enabled: bool | None = None
+    face_verification_attempt_limit: Literal[3, 5] | None = None
+
+
 class SchoolProfileUpdate(APIModel):
     school_name: str | None = Field(default=None, min_length=2, max_length=180)
     school_code: str | None = Field(default=None, max_length=64)
@@ -168,11 +221,16 @@ class SchoolProfileUpdate(APIModel):
     current_academic_year: str | None = Field(default=None, min_length=4, max_length=32)
     logo_url: str | None = None
     branding: BrandingConfig | None = None
+    settings: SchoolOperationsSettings | None = None
 
     @field_validator("logo_url")
     @classmethod
     def validate_logo(cls, value: str | None) -> str | None:
         return validate_school_logo_url(value)
+
+
+class ManualAttendanceConfirmRequest(APIModel):
+    status: Literal["PRESENT", "LATE", "ABSENT"] = "PRESENT"
 
 
 class PaginatedParams(APIModel):

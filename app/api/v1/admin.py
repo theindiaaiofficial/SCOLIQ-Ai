@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
-from uuid import UUID
+from datetime import date, timedelta, timezone
+import logging
+import secrets
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -26,6 +28,7 @@ from app.models import (
     ClassRecord,
     GuardianConsentRecord,
     PasskeyCredential,
+    PrincipalPasswordResetCode,
     SchoolProfile,
     Student,
     StudentClassEnrollment,
@@ -39,6 +42,8 @@ from app.models import (
 from app.schemas import (
     AdminLoginRequest,
     PasswordChangeRequest,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
     ApproveRequest,
     BootstrapRequest,
     ConsentGrantRequest,
@@ -52,9 +57,10 @@ from app.schemas import (
     TeacherConsentPermissionRequest,
 )
 from app.services.common import add_audit, clear_auth_cookies, local_today, set_auth_cookies
+from app.services.school_settings import DEFAULT_SCHOOL_SETTINGS
 
 router = APIRouter(prefix="/admin", tags=["Principal administration"])
-
+logger = logging.getLogger("scoliq.password_reset")
 
 def settings_from(request: Request):
     return request.app.state.settings
@@ -80,6 +86,9 @@ def ensure_school_profile(db: Session) -> SchoolProfile:
 
 def school_profile_payload(profile: SchoolProfile) -> dict:
     branding = BrandingConfig.model_validate({**DEFAULT_BRANDING, **(profile.branding or {})})
+    settings = {**DEFAULT_SCHOOL_SETTINGS, **(profile.settings or {})}
+    if settings.get("face_verification_attempt_limit") not in {3, 5}:
+        settings["face_verification_attempt_limit"] = 5
     return {
         "school_name": profile.school_name,
         "school_code": profile.school_code,
@@ -87,7 +96,7 @@ def school_profile_payload(profile: SchoolProfile) -> dict:
         "current_academic_year": profile.current_academic_year,
         "logo_url": profile.logo_url,
         "branding": branding.model_dump(),
-        "settings": profile.settings,
+        "settings": settings,
     }
 
 
@@ -138,6 +147,107 @@ def admin_login(payload: AdminLoginRequest, request: Request, response: Response
     db.commit()
     set_auth_cookies(response, raw, csrf, settings_from(request))
     return {"message": "Signed in successfully.", "csrf_token": csrf}
+
+
+@router.post("/auth/password-reset/request")
+def request_admin_password_reset(payload: PasswordResetRequest, request: Request, db: Session = Depends(get_db)):
+    settings = settings_from(request)
+    if not settings.resend_api_key or not settings.resend_from_email:
+        raise error("PASSWORD_RESET_UNAVAILABLE", "Password recovery email is not configured yet. Contact the school system administrator.", 503)
+
+    email = str(payload.email).lower()
+    client_ip = request.client.host if request.client else "unknown"
+    email_hash = digest_token(f"principal-reset-email:{email}", settings.session_secret or None)
+    ip_hash = digest_token(f"principal-reset-ip:{client_ip}", settings.session_secret or None)
+    now = utcnow()
+    recent_count = db.scalar(select(func.count()).select_from(PrincipalPasswordResetCode).where(
+        PrincipalPasswordResetCode.created_at >= now - timedelta(hours=1),
+        or_(PrincipalPasswordResetCode.email_hash == email_hash, PrincipalPasswordResetCode.ip_hash == ip_hash),
+    )) or 0
+
+    if recent_count < 3:
+        principal = db.scalar(select(User).where(
+            User.role == "PRINCIPAL", User.email == email, User.status == "ACTIVE",
+        ))
+        code = f"{secrets.randbelow(1_000_000):06d}" if principal else "000000"
+        reset = PrincipalPasswordResetCode(
+            id=uuid4(),
+            user_id=principal.id if principal else None,
+            email_hash=email_hash,
+            ip_hash=ip_hash,
+            code_hash="0" * 64,
+            attempts=0,
+            created_at=now,
+            expires_at=now + timedelta(minutes=10),
+        )
+        reset.code_hash = digest_token(f"{reset.id}:{code}", settings.session_secret or None)
+        db.add(reset)
+        db.commit()
+        if principal is not None:
+            try:
+                from app.services.email_delivery import send_principal_password_reset_email
+
+                send_principal_password_reset_email(
+                    api_key=settings.resend_api_key,
+                    from_email=settings.resend_from_email,
+                    to_email=email,
+                    code=code,
+                )
+            except Exception:
+                reset.used_at = utcnow()
+                db.commit()
+                logger.exception("principal_password_reset_email_delivery_failed")
+
+    # The same response is returned for existing and non-existing email addresses.
+    return {"message": "If a matching Principal account exists, a verification code has been sent to its registered email address."}
+
+
+@router.post("/auth/password-reset/confirm")
+def confirm_admin_password_reset(payload: PasswordResetConfirmRequest, request: Request, db: Session = Depends(get_db)):
+    settings = settings_from(request)
+    email = str(payload.email).lower()
+    email_hash = digest_token(f"principal-reset-email:{email}", settings.session_secret or None)
+    now = utcnow()
+    reset = db.scalar(select(PrincipalPasswordResetCode).where(
+        PrincipalPasswordResetCode.email_hash == email_hash,
+        PrincipalPasswordResetCode.used_at.is_(None),
+    ).order_by(PrincipalPasswordResetCode.created_at.desc()).limit(1).with_for_update())
+    invalid_message = "The verification code is invalid or expired. Request a new code and try again."
+    expires_at = reset.expires_at if reset is not None else None
+    if expires_at is not None and expires_at.tzinfo is None:
+        # SQLite test/development databases may return timezone-naive datetimes.
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if reset is None or reset.user_id is None or expires_at <= now or reset.attempts >= 5:
+        raise error("PASSWORD_RESET_CODE_INVALID", invalid_message, 400)
+
+    reset.attempts += 1
+    expected_hash = digest_token(f"{reset.id}:{payload.code}", settings.session_secret or None)
+    if not constant_time_secret_match(reset.code_hash, expected_hash):
+        if reset.attempts >= 5:
+            reset.used_at = now
+        db.commit()
+        raise error("PASSWORD_RESET_CODE_INVALID", invalid_message, 400)
+
+    principal = db.get(User, reset.user_id)
+    credential = db.get(AdminCredential, reset.user_id)
+    if principal is None or principal.role != "PRINCIPAL" or principal.status != "ACTIVE" or credential is None:
+        reset.used_at = now
+        db.commit()
+        raise error("PASSWORD_RESET_CODE_INVALID", invalid_message, 400)
+
+    credential.password_hash = hash_password(payload.new_password)
+    credential.password_changed_at = now
+    reset.used_at = now
+    for old_reset in db.scalars(select(PrincipalPasswordResetCode).where(
+        PrincipalPasswordResetCode.user_id == principal.id,
+        PrincipalPasswordResetCode.used_at.is_(None),
+    )).all():
+        old_reset.used_at = now
+    revoked_count = revoke_all_user_sessions(db, principal.id)
+    add_audit(db, actor_user_id=principal.id, action="PRINCIPAL_PASSWORD_RESET", entity_type="user", entity_id=principal.id,
+              metadata={"revoked_sessions": revoked_count})
+    db.commit()
+    return {"message": "Principal password reset successfully. Please sign in with your new password."}
 
 
 @router.post("/auth/logout")
@@ -613,6 +723,9 @@ def update_school_profile(payload: SchoolProfileUpdate, identity: Identity = Dep
         profile.logo_url = updates["logo_url"]
     if updates.get("branding") is not None:
         profile.branding = BrandingConfig.model_validate(updates["branding"]).model_dump()
+    if updates.get("settings") is not None:
+        safe_updates = {key: value for key, value in updates["settings"].items() if value is not None}
+        profile.settings = {**(profile.settings or {}), **safe_updates}
     profile.updated_at = utcnow()
     changed_fields = list(updates)
     add_audit(db, actor_user_id=identity.user.id, action="SCHOOL_PROFILE_UPDATED", entity_type="school_profile", entity_id="1", metadata={"fields": changed_fields})

@@ -300,6 +300,44 @@ export function BrandStudioPage() {
   </>;
 }
 
+
+export function AdminSchoolSettingsPage() {
+  const queryClient = useQueryClient();
+  const profile = useQuery({ queryKey: ['admin-profile'], queryFn: api.admin.profile });
+  const [studentInfo, setStudentInfo] = useState(false);
+  const [attemptLimit, setAttemptLimit] = useState<'3' | '5'>('5');
+  useEffect(() => {
+    if (profile.data) {
+      setStudentInfo(Boolean(profile.data.settings?.student_information_enabled));
+      setAttemptLimit(profile.data.settings?.face_verification_attempt_limit === 3 ? '3' : '5');
+    }
+  }, [profile.data]);
+  const save = useMutation({
+    mutationFn: () => api.admin.updateProfile({ settings: { student_information_enabled: studentInfo, face_verification_attempt_limit: Number(attemptLimit) as 3 | 5 } }),
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ['admin-profile'] }); await queryClient.invalidateQueries({ queryKey: ['teacher-student-form-settings'] }); toast.success('School settings saved'); },
+    onError: (error) => toast.error(error instanceof Error ? error.message : 'Settings could not be saved'),
+  });
+  return <><PageHeader title="School settings" description="Control student information collection and attendance verification for every assigned class." />
+    <QueryPanel isLoading={profile.isLoading} isError={profile.isError} error={profile.error} retry={() => void profile.refetch()}>
+      <div className="settings-grid">
+        <Card className="panel-card">
+          <div className="section-heading"><div><h2>Detailed student information</h2><p>When enabled, every teacher’s Add Student form includes guardian details.</p></div><Users size={19} /></div>
+          <label className="setting-toggle"><span><strong>Collect additional student details</strong><small>Father’s name, mother’s name, primary guardian phone and alternate guardian phone.</small></span><input type="checkbox" checked={studentInfo} onChange={(event) => setStudentInfo(event.target.checked)} /></label>
+          <Notice tone={studentInfo ? 'success' : 'info'}>{studentInfo ? 'Enabled: all teachers will see the additional fields when adding students.' : 'Disabled: teachers keep using the current basic Add Student form.'}</Notice>
+          <div className="section-heading" style={{ marginTop: 24 }}><div><h2>Face verification attempts</h2><p>Attempts are counted separately for each student in each attendance session.</p></div><FingerprintIcon /></div>
+          <SelectField label="Maximum front-facing attempts per student" value={attemptLimit} onChange={(event) => setAttemptLimit(event.target.value as '3' | '5')}>
+            <option value="3">3 attempts</option><option value="5">5 attempts</option>
+          </SelectField>
+          <Notice tone="warning">After the limit is reached, the teacher must find the student by name or roll number and confirm the student in person. A failed face scan never marks a student absent.</Notice>
+          <div className="modal-actions"><Button onClick={() => save.mutate()} loading={save.isPending} disabled={!profile.data}>Save school settings</Button></div>
+        </Card>
+      </div>
+    </QueryPanel>
+  </>;
+}
+
+function FingerprintIcon() { return <ShieldCheck size={19} />; }
+
 export function AdminSecurityPage() {
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');

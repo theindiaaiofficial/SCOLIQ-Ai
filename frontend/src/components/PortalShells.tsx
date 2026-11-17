@@ -26,6 +26,7 @@ const adminNav: NavItem[] = [
   { label: 'Live attendance', to: '/admin/live-attendance', icon: Activity, group: 'Attendance' },
   { label: 'Attendance reports', to: '/admin/reports', icon: ChartNoAxesCombined, group: 'Attendance' },
   { label: 'Brand studio', to: '/admin/settings', icon: Palette, group: 'Administration' },
+  { label: 'School settings', to: '/admin/school-settings', icon: Settings, group: 'Administration' },
   { label: 'Audit log', to: '/admin/audit', icon: ShieldCheck, group: 'Administration' },
   { label: 'Account & security', to: '/admin/security', icon: Settings, group: 'Administration' },
 ];

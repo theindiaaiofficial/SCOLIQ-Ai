@@ -5,7 +5,7 @@ import { AdminLayout, TeacherLayout } from './components/PortalShells';
 import { ErrorState, LoadingState } from './components/ui';
 import { AdminLoginPage, TeacherActivationPage, TeacherLoginPage, TeacherRequestPage } from './features/auth/PublicAuthPages';
 import {
-  AdminDashboardPage, AdminSecurityPage, AuditPage, BrandStudioPage, ClassesPage,
+  AdminDashboardPage, AdminSchoolSettingsPage, AdminSecurityPage, AuditPage, BrandStudioPage, ClassesPage,
   LiveAttendancePage, ReportsPage, StudentsPage, TeacherRequestsPage, TeachersPage,
 } from './features/admin/AdminPages';
 import {
@@ -46,6 +46,7 @@ export default function App() {
       <Route path="live-attendance" element={<LiveAttendancePage />} />
       <Route path="reports" element={<ReportsPage />} />
       <Route path="settings" element={<BrandStudioPage />} />
+      <Route path="school-settings" element={<AdminSchoolSettingsPage />} />
       <Route path="audit" element={<AuditPage />} />
       <Route path="security" element={<AdminSecurityPage />} />
       <Route path="*" element={<Navigate to="dashboard" replace />} />

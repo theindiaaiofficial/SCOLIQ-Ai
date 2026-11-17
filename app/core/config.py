@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     session_secret: str = ""
     session_ttl_hours: int = Field(default=12, ge=1, le=168)
     initial_admin_setup_token: str = ""
+    resend_api_key: str = ""
+    resend_from_email: str = ""
     cors_allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
     cookie_secure: bool = False
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"

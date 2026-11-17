@@ -17,11 +17,19 @@ from app.models import (
     StudentClassEnrollment,
     StudentFaceTemplate,
     TeacherClassAssignment,
+    SchoolProfile,
 )
 from app.schemas import ClassSetupRequest, ConsentGrantRequest, StudentCreateRequest, StudentUpdateRequest
 from app.services.common import add_audit, selected_teacher_class
+from app.services.school_settings import get_school_operations_settings
 
 router = APIRouter(prefix="/teacher", tags=["Teacher class and students"])
+
+
+@router.get("/student-form-settings")
+def student_form_settings(identity: Identity = Depends(require_teacher), db: Session = Depends(get_db)):
+    settings = get_school_operations_settings(db)
+    return {"student_information_enabled": bool(settings["student_information_enabled"])}
 
 
 @router.post("/class-setup", status_code=201)
@@ -112,6 +120,11 @@ def teacher_class(request: Request, identity: Identity = Depends(require_teacher
 @router.post("/students", status_code=201)
 def create_student(payload: StudentCreateRequest, request: Request, identity: Identity = Depends(require_teacher), db: Session = Depends(get_db)):
     _, class_record = selected_teacher_class(db, identity.user.id, request)
+    school_settings = get_school_operations_settings(db)
+    student_information_enabled = bool(school_settings["student_information_enabled"])
+    extra_fields = (payload.father_name, payload.mother_name, payload.guardian_phone, payload.alternate_guardian_phone)
+    if not student_information_enabled and any(value is not None for value in extra_fields):
+        raise error("STUDENT_INFORMATION_DISABLED", "Detailed student information is currently disabled by the Principal.", 403)
     student = db.scalar(select(Student).where(Student.school_student_code == payload.school_student_code)) if payload.school_student_code else None
     if student and db.scalar(select(StudentClassEnrollment.id).where(
         StudentClassEnrollment.student_id == student.id,
@@ -120,7 +133,14 @@ def create_student(payload: StudentCreateRequest, request: Request, identity: Id
         raise error("STUDENT_ALREADY_ENROLLED", "This student already has an enrollment for the current academic year.", 409)
     created_new_student = student is None
     if student is None:
-        student = Student(full_name=payload.full_name, school_student_code=payload.school_student_code)
+        student = Student(
+            full_name=payload.full_name,
+            school_student_code=payload.school_student_code,
+            father_name=payload.father_name if student_information_enabled else None,
+            mother_name=payload.mother_name if student_information_enabled else None,
+            guardian_phone=payload.guardian_phone if student_information_enabled else None,
+            alternate_guardian_phone=payload.alternate_guardian_phone if student_information_enabled else None,
+        )
         db.add(student)
         try:
             db.flush()
@@ -129,6 +149,11 @@ def create_student(payload: StudentCreateRequest, request: Request, identity: Id
             raise error("ENROLLMENT_CONFLICT", "The student code was enrolled by another request. Refresh the roster and retry.", 409) from exc
     else:
         student.full_name = payload.full_name
+        if student_information_enabled:
+            for field in ("father_name", "mother_name", "guardian_phone", "alternate_guardian_phone"):
+                value = getattr(payload, field)
+                if value is not None:
+                    setattr(student, field, value)
     enrollment = StudentClassEnrollment(
         student_id=student.id,
         class_id=class_record.id,
@@ -192,9 +217,15 @@ def get_student(student_id: UUID, request: Request, identity: Identity = Depends
         raise error("STUDENT_NOT_FOUND", "Student was not found in your assigned class.", 404)
     student, enrollment = row
     consent = db.scalar(select(GuardianConsentRecord).where(GuardianConsentRecord.student_id == student.id).order_by(GuardianConsentRecord.recorded_at.desc()))
+    settings = get_school_operations_settings(db)
+    include_details = bool(settings["student_information_enabled"])
     return {"student_id": str(student.id), "enrollment_id": str(enrollment.id), "full_name": student.full_name,
             "roll_number": enrollment.roll_number, "school_student_code": student.school_student_code,
-            "status": student.status, "consent_status": consent.consent_status if consent else "PENDING"}
+            "status": student.status, "consent_status": consent.consent_status if consent else "PENDING",
+            "father_name": student.father_name if include_details else None,
+            "mother_name": student.mother_name if include_details else None,
+            "guardian_phone": student.guardian_phone if include_details else None,
+            "alternate_guardian_phone": student.alternate_guardian_phone if include_details else None}
 
 
 @router.patch("/students/{student_id}")
@@ -208,10 +239,16 @@ def update_student(student_id: UUID, payload: StudentUpdateRequest, request: Req
         raise error("STUDENT_NOT_FOUND", "Student was not found in your assigned class.", 404)
     student, enrollment = row
     updates = payload.model_dump(exclude_unset=True, exclude_none=True)
+    profile_settings = get_school_operations_settings(db)
+    detail_keys = {"father_name", "mother_name", "guardian_phone", "alternate_guardian_phone"}
+    if not profile_settings["student_information_enabled"] and detail_keys.intersection(updates):
+        raise error("STUDENT_INFORMATION_DISABLED", "Detailed student information is currently disabled by the Principal.", 403)
     if "full_name" in updates:
         student.full_name = updates["full_name"]
     if "roll_number" in updates:
         enrollment.roll_number = updates["roll_number"]
+    for field in detail_keys.intersection(updates):
+        setattr(student, field, updates[field])
     if "status" in updates:
         student.status = updates["status"]
         if updates["status"] == "TRANSFERRED":

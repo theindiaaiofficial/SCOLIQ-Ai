@@ -90,6 +90,8 @@ export const api = {
     bootstrapStatus: () => apiRequest<{ available: boolean; principal_exists: boolean }>('/admin/bootstrap/status'),
     bootstrap: (body: { setup_token: string; full_name: string; email: string; password: string }) => apiRequest<{ csrf_token: string; message: string }>('/admin/bootstrap', { method: 'POST', body, csrf: false }),
     login: (body: { email: string; password: string }) => apiRequest<{ csrf_token: string; message: string }>('/admin/auth/login', { method: 'POST', body, csrf: false }),
+    requestPasswordReset: (email: string) => apiRequest<{ message: string }>('/admin/auth/password-reset/request', { method: 'POST', body: { email }, csrf: false }),
+    confirmPasswordReset: (body: { email: string; code: string; new_password: string }) => apiRequest<{ message: string }>('/admin/auth/password-reset/confirm', { method: 'POST', body, csrf: false }),
     logout: () => apiRequest<{ message: string }>('/admin/auth/logout', { method: 'POST' }),
     me: () => apiRequest<import('./types').Principal>('/admin/me'),
     changePassword: (body: { current_password: string; new_password: string }) => apiRequest<{ csrf_token: string; message: string }>('/admin/auth/password', { method: 'POST', body }),
@@ -133,8 +135,9 @@ export const api = {
     setupClass: (body: { grade_label: string; section_label: string; academic_year: string }) => apiRequest('/teacher/class-setup', { method: 'POST', body }),
     students: (search = '', page = 1, classId?: string | null) => apiRequest<import('./types').PageResult<import('./types').Student>>(`/teacher/students${query({ q: search, page, page_size: 50 })}`, { classId }),
     student: (id: string, classId?: string | null) => apiRequest<import('./types').Student & { enrollment_id: string; consent_status: 'PENDING' | 'GRANTED' | 'WITHDRAWN' }>(`/teacher/students/${id}`, { classId }),
-    createStudent: (body: { full_name: string; roll_number: string; school_student_code?: string | null }, classId?: string | null) => apiRequest('/teacher/students', { method: 'POST', body: { ...body, consent_status: 'PENDING' }, classId }),
-    updateStudent: (id: string, body: { full_name?: string; roll_number?: string; status?: string }, classId?: string | null) => apiRequest(`/teacher/students/${id}`, { method: 'PATCH', body, classId }),
+    studentFormSettings: (classId?: string | null) => apiRequest<{ student_information_enabled: boolean }>('/teacher/student-form-settings', { classId }),
+    createStudent: (body: { full_name: string; roll_number: string; school_student_code?: string | null; father_name?: string | null; mother_name?: string | null; guardian_phone?: string | null; alternate_guardian_phone?: string | null }, classId?: string | null) => apiRequest('/teacher/students', { method: 'POST', body: { ...body, consent_status: 'PENDING' }, classId }),
+    updateStudent: (id: string, body: { full_name?: string; roll_number?: string; status?: string; father_name?: string | null; mother_name?: string | null; guardian_phone?: string | null; alternate_guardian_phone?: string | null }, classId?: string | null) => apiRequest(`/teacher/students/${id}`, { method: 'PATCH', body, classId }),
     recordGuardianConsent: (id: string, body: { consent_status: 'GRANTED' | 'WITHDRAWN'; consent_method: string; consent_record_reference: string }, classId?: string | null) => apiRequest(`/teacher/students/${id}/consent`, { method: 'POST', body, classId }),
     
     faceCaptureGuidance: async (file: File, classId?: string | null) => {
@@ -175,10 +178,13 @@ export const api = {
     openAttendance: (classId?: string | null) => apiRequest<import('./types').AttendanceSession>('/teacher/attendance/sessions', { method: 'POST', classId }),
     attendanceSession: (sessionId: string) => apiRequest<import('./types').AttendanceSession>(`/teacher/attendance/sessions/${sessionId}`),
     attendanceReview: (sessionId: string) => apiRequest<import('./types').AttendanceReview>(`/teacher/attendance/sessions/${sessionId}/review`),
+    attendanceProgress: (sessionId: string) => apiRequest<import('./types').AttendanceVerificationProgress>(`/teacher/attendance/sessions/${sessionId}/verification-progress`),
+    lookupAttendanceStudent: (sessionId: string, q: string) => apiRequest<{ items: import('./types').AttendanceVerificationStudent[] }>(`/teacher/attendance/sessions/${sessionId}/students/lookup${query({ q })}`),
     identify: async (
       sessionId: string,
       files: File | File[],
-      classId?: string | null
+      classId?: string | null,
+      expectedEnrollmentId?: string | null,
     ) => {
       const form = new FormData();
       const fileList = Array.isArray(files) ? files : [files];
@@ -198,6 +204,7 @@ export const api = {
           form.append('files', file);
         });
       }
+      if (expectedEnrollmentId) form.append('expected_enrollment_id', expectedEnrollmentId);
     
       return apiRequest<import('./types').FaceIdentifyResult>(
         `/teacher/attendance/sessions/${sessionId}/identify`,
@@ -210,6 +217,8 @@ export const api = {
     },
     
     resumeScanning: (sessionId: string) => apiRequest(`/teacher/attendance/sessions/${sessionId}/resume-scanning`, { method: 'POST' }),
+    confirmFaceAttendance: (sessionId: string, enrollmentId: string) => apiRequest(`/teacher/attendance/sessions/${sessionId}/confirm-face/${enrollmentId}`, { method: 'POST' }),
+    manualConfirmAttendance: (sessionId: string, enrollmentId: string, status: 'PRESENT' | 'LATE' | 'ABSENT' = 'PRESENT') => apiRequest(`/teacher/attendance/sessions/${sessionId}/manual-confirm/${enrollmentId}`, { method: 'POST', body: { status } }),
     markAttendance: (sessionId: string, enrollmentId: string, status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED', notes: string | null) => apiRequest(`/teacher/attendance/sessions/${sessionId}/marks/${enrollmentId}`, { method: 'PATCH', body: { status, notes } }),
     finalizeAttendance: (sessionId: string) => apiRequest(`/teacher/attendance/sessions/${sessionId}/finalize`, { method: 'POST', body: { confirmation: 'CONFIRM_ALL_STATUSES' } }),
     history: (page = 1, classId?: string | null) => apiRequest<import('./types').PageResult<{ session_id: string; date: string; present_count: number; absent_count: number; finalized_at: string }>>(`/teacher/attendance/history${query({ page, page_size: 50 })}`, { classId }),

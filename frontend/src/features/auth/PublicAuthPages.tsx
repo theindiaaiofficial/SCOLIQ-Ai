@@ -29,10 +29,18 @@ export function AdminLoginPage() {
   const [fullName, setFullName] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [forgotMode, setForgotMode] = useState<'none' | 'request' | 'confirm'>('none');
+  const [resetCode, setResetCode] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetPasswordConfirm, setResetPasswordConfirm] = useState('');
   const status = useQuery({ queryKey: ['admin-bootstrap-status'], queryFn: api.admin.bootstrapStatus, retry: false });
   const login = useMutation({ mutationFn: () => api.admin.login({ email, password }), onSuccess: () => { queryClient.clear(); toast.success('Welcome back'); navigate('/admin/dashboard', { replace: true }); }, onError: (e) => toast.error(e instanceof Error ? e.message : 'Sign in failed') });
   const bootstrap = useMutation({ mutationFn: () => api.admin.bootstrap({ setup_token: setupToken, full_name: fullName, email: newEmail, password: newPassword }), onSuccess: () => { queryClient.clear(); toast.success('Principal account created'); navigate('/admin/dashboard', { replace: true }); }, onError: (e) => toast.error(e instanceof Error ? e.message : 'Account setup failed') });
-  return <AuthFrame portal="Principal" eyebrow="ADMINISTRATOR ACCESS" title={setupMode ? 'Set up your Principal account' : 'Welcome back'} description={setupMode ? 'Create the first Principal account using the one-time setup secret configured for this school.' : 'Sign in to manage your school, teachers, classes and attendance.'}>
+  const requestReset = useMutation({ mutationFn: () => api.admin.requestPasswordReset(email.trim()), onSuccess: (data) => { setForgotMode('confirm'); toast.success(data.message); }, onError: (e) => toast.error(e instanceof Error ? e.message : 'Could not request a reset code') });
+  const confirmReset = useMutation({ mutationFn: () => api.admin.confirmPasswordReset({ email: email.trim(), code: resetCode.trim(), new_password: resetPassword }), onSuccess: (data) => { setForgotMode('none'); setResetCode(''); setResetPassword(''); setResetPasswordConfirm(''); setPassword(''); toast.success(data.message); }, onError: (e) => toast.error(e instanceof Error ? e.message : 'Password reset failed') });
+  const pageTitle = setupMode ? 'Set up your Principal account' : forgotMode === 'request' ? 'Recover your account' : forgotMode === 'confirm' ? 'Choose a new password' : 'Welcome back';
+  const pageDescription = setupMode ? 'Create the first Principal account using the one-time setup secret configured for this school.' : forgotMode === 'request' ? 'We will send a one-time verification code to the registered Principal email address.' : forgotMode === 'confirm' ? 'Enter the six-digit code from your email and choose a new password.' : 'Sign in to manage your school, teachers, classes and attendance.';
+  return <AuthFrame portal="Principal" eyebrow="ADMINISTRATOR ACCESS" title={pageTitle} description={pageDescription}>
     {setupMode ? <form className="stack-form" onSubmit={(e) => { e.preventDefault(); bootstrap.mutate(); }}>
       <TextField label="One-time setup token" type="password" value={setupToken} onChange={(e) => setSetupToken(e.target.value)} minLength={24} required />
       <TextField label="Principal full name" value={fullName} onChange={(e) => setFullName(e.target.value)} minLength={2} required />
@@ -40,11 +48,24 @@ export function AdminLoginPage() {
       <TextField label="Password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={12} hint="At least 12 characters." required />
       <Button type="submit" block loading={bootstrap.isPending} disabled={setupToken.length < 24 || fullName.trim().length < 2 || !newEmail.includes('@') || newPassword.length < 12}>Create Principal account <ArrowRight size={16} /></Button>
       <Button variant="ghost" type="button" onClick={() => setSetupMode(false)}>Back to sign in</Button>
+    </form> : forgotMode === 'request' ? <form className="stack-form" onSubmit={(e) => { e.preventDefault(); requestReset.mutate(); }}>
+      <TextField label="Registered Principal email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      <Button type="submit" block loading={requestReset.isPending} disabled={!email.includes('@')}>Send verification code <ArrowRight size={16} /></Button>
+      <Button variant="ghost" type="button" onClick={() => setForgotMode('none')}>Back to sign in</Button>
+      <Notice tone="info">For privacy, the page does not reveal whether an email address belongs to a Principal account.</Notice>
+    </form> : forgotMode === 'confirm' ? <form className="stack-form" onSubmit={(e) => { e.preventDefault(); if (resetPassword !== resetPasswordConfirm) { toast.error('The new passwords do not match.'); return; } confirmReset.mutate(); }}>
+      <TextField label="Registered Principal email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+      <TextField label="Six-digit email code" value={resetCode} onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))} autoComplete="one-time-code" required />
+      <TextField label="New password" type="password" autoComplete="new-password" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} minLength={12} hint="At least 12 characters." required />
+      <TextField label="Confirm new password" type="password" autoComplete="new-password" value={resetPasswordConfirm} onChange={(e) => setResetPasswordConfirm(e.target.value)} minLength={12} required />
+      <Button type="submit" block loading={confirmReset.isPending} disabled={resetCode.length !== 6 || resetPassword.length < 12 || resetPassword !== resetPasswordConfirm}>Reset password securely <ArrowRight size={16} /></Button>
+      <Button variant="ghost" type="button" onClick={() => { setForgotMode('request'); setResetCode(''); }}>Request another code</Button>
+      <Notice tone="warning">The code expires in 10 minutes, can be used once, and allows only five verification attempts.</Notice>
     </form> : <form className="stack-form" onSubmit={(e) => { e.preventDefault(); login.mutate(); }}>
       <TextField label="Email address" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />
       <TextField label="Password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
       <Button type="submit" block loading={login.isPending} disabled={!email.includes('@') || !password}>Sign in securely <ArrowRight size={16} /></Button>
-      <div className="auth-links"><span>Teacher? <Link to="/teacher">Open the shared Teacher portal</Link></span>{status.data?.available ? <button type="button" onClick={() => setSetupMode(true)}>First-time setup</button> : null}</div>
+      <div className="auth-links"><span>Teacher? <Link to="/teacher">Open the shared Teacher portal</Link></span><button type="button" onClick={() => setForgotMode('request')}>Forgot password?</button>{status.data?.available ? <button type="button" onClick={() => setSetupMode(true)}>First-time setup</button> : null}</div>
       {status.isError ? <Notice tone="warning">Unable to check bootstrap status. The Principal may need to create the first account using the documented CLI setup.</Notice> : null}
     </form>}
   </AuthFrame>;

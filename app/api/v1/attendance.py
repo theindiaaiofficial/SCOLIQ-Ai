@@ -4,8 +4,8 @@ from datetime import date
 import time
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -29,6 +29,7 @@ from app.models import (
     AttendanceScanEvent,
     AttendanceSession,
     AttendanceSessionMark,
+    AttendanceVerificationAttempt,
     ClassRecord,
     GuardianConsentRecord,
     SchoolProfile,
@@ -37,9 +38,10 @@ from app.models import (
     StudentFaceTemplate,
     TeacherClassAssignment,
 )
-from app.schemas import FinalizeRequest, MarkUpdateRequest
+from app.schemas import FinalizeRequest, ManualAttendanceConfirmRequest, MarkUpdateRequest
 from app.services.attendance import finalize_session, record_scan, review_payload
 from app.services.common import add_audit, local_today, selected_teacher_class
+from app.services.school_settings import get_school_operations_settings
 
 router = APIRouter(prefix="/teacher", tags=["Teacher attendance and face enrollment"])
 
@@ -113,6 +115,27 @@ def _read_and_validate_upload(file: UploadFile, request: Request) -> bytes:
         result="success",
     )
     return content
+
+
+def _attempt_count(db: Session, session_id: UUID, enrollment_id: UUID, *, increment: bool = False) -> int:
+    row = db.scalar(select(AttendanceVerificationAttempt).where(
+        AttendanceVerificationAttempt.session_id == session_id,
+        AttendanceVerificationAttempt.enrollment_id == enrollment_id,
+    ).with_for_update())
+    if row is None:
+        if not increment:
+            return 0
+        row = AttendanceVerificationAttempt(session_id=session_id, enrollment_id=enrollment_id, attempt_count=0)
+        db.add(row)
+        db.flush()
+    if increment:
+        row.attempt_count += 1
+        row.updated_at = utcnow()
+    return row.attempt_count
+
+
+def _attempt_limit(db: Session) -> int:
+    return int(get_school_operations_settings(db)["face_verification_attempt_limit"])
 
 
 @router.post("/face-capture-guidance")
@@ -300,6 +323,7 @@ async def identify_student(
     request: Request,
     file: UploadFile | None = File(default=None),
     files: list[UploadFile] | None = File(default=None),
+    expected_enrollment_id: UUID | None = Form(default=None),
     identity: Identity = Depends(require_teacher),
     db: Session = Depends(get_db),
 ):
@@ -309,6 +333,29 @@ async def identify_student(
     uploads = files or ([file] if file is not None else [])
     if not 1 <= len(uploads) <= 3:
         raise error("INVALID_CAPTURE_COUNT", "Send one to three live face captures.", 422)
+
+    attempt_limit = _attempt_limit(db)
+    expected_enrollment = None
+    if expected_enrollment_id is not None:
+        if len(uploads) != 1:
+            raise error("INVALID_CAPTURE_COUNT", "Attendance verification uses one front-facing capture per attempt.", 422)
+        expected_enrollment = db.scalar(select(StudentClassEnrollment).where(
+            StudentClassEnrollment.id == expected_enrollment_id,
+            StudentClassEnrollment.class_id == session.class_id,
+            StudentClassEnrollment.enrollment_status == "ACTIVE",
+        ))
+        if expected_enrollment is None:
+            raise error("ENROLLMENT_NOT_FOUND", "The current student is not enrolled in this attendance class.", 404)
+        current_attempts = _attempt_count(db, session.id, expected_enrollment.id)
+        if current_attempts >= attempt_limit:
+            raise error("FACE_ATTEMPT_LIMIT_REACHED", "The verification limit has been reached. Continue with manual student verification.", 409)
+        existing_mark = db.scalar(select(AttendanceSessionMark).where(
+            AttendanceSessionMark.session_id == session.id,
+            AttendanceSessionMark.enrollment_id == expected_enrollment.id,
+            AttendanceSessionMark.is_confirmed.is_(True),
+        ))
+        if existing_mark:
+            raise error("STUDENT_ALREADY_CONFIRMED", "This student's attendance has already been confirmed.", 409)
 
     log_face_event("identification.started", session_status=session.status, capture_count=len(uploads))
     provider = _provider(request)
@@ -334,13 +381,17 @@ async def identify_student(
         except NoFaceDetected as exc:
             log_face_event("identification.capture_rejected", capture_index=capture_index, stage="face_detection", exception_type=type(exc).__name__, reason=str(exc))
             event, _ = record_scan(db, session=session, teacher_user_id=identity.user.id, status="NO_MATCH")
+            attempt_count = _attempt_count(db, session.id, expected_enrollment.id, increment=True) if expected_enrollment else None
             db.commit()
-            raise error("NO_FACE_DETECTED", str(exc), 422) from exc
+            suffix = f" Verification attempt {attempt_count} of {attempt_limit}." if attempt_count is not None else ""
+            raise error("NO_FACE_DETECTED", f"{exc}{suffix}", 422) from exc
         except (MultipleFacesDetected, PoorFaceQuality) as exc:
             log_face_event("identification.capture_rejected", capture_index=capture_index, stage="face_quality", exception_type=type(exc).__name__, reason=str(exc))
             record_scan(db, session=session, teacher_user_id=identity.user.id, status="POOR_QUALITY")
+            attempt_count = _attempt_count(db, session.id, expected_enrollment.id, increment=True) if expected_enrollment else None
             db.commit()
-            raise error("POOR_FACE_QUALITY", str(exc), 422) from exc
+            suffix = f" Verification attempt {attempt_count} of {attempt_limit}." if attempt_count is not None else ""
+            raise error("POOR_FACE_QUALITY", f"{exc}{suffix}", 422) from exc
         except ProviderUnavailable as exc:
             log_face_event("identification.capture_rejected", capture_index=capture_index, stage="provider", exception_type=type(exc).__name__, reason=str(exc))
             record_scan(db, session=session, teacher_user_id=identity.user.id, status="PROVIDER_UNAVAILABLE")
@@ -349,8 +400,10 @@ async def identify_student(
         except FaceProviderError as exc:
             log_face_event("identification.capture_rejected", capture_index=capture_index, stage="embedding", exception_type=type(exc).__name__, reason=str(exc))
             record_scan(db, session=session, teacher_user_id=identity.user.id, status="POOR_QUALITY")
+            attempt_count = _attempt_count(db, session.id, expected_enrollment.id, increment=True) if expected_enrollment else None
             db.commit()
-            raise error("FACE_PROCESSING_FAILED", "The capture could not be processed. Use a new capture or manual attendance.", 422) from exc
+            suffix = f" Verification attempt {attempt_count} of {attempt_limit}." if attempt_count is not None else ""
+            raise error("FACE_PROCESSING_FAILED", f"The capture could not be processed. Retake a front-facing image.{suffix}", 422) from exc
         finally:
             raw = b""
 
@@ -366,6 +419,8 @@ async def identify_student(
         StudentFaceTemplate.model_name == provider.model_name,
         StudentFaceTemplate.model_version == provider.model_version,
     )).all()
+    if expected_enrollment is not None:
+        rows = [row for row in rows if row[0].id == expected_enrollment.id]
 
     # Each live pose is scored against the student's enrolled templates. The final
     # per-student score is the mean of the best two pose scores (or the only score
@@ -437,6 +492,13 @@ async def identify_student(
     )
     event, new_mark = record_scan(db, session=session, teacher_user_id=identity.user.id, status=status,
                                   enrollment=matched_enrollment, score=score)
+    attempt_count = None
+    manual_required = False
+    if expected_enrollment is not None and status in {"NO_MATCH", "AMBIGUOUS"}:
+        attempt_count = _attempt_count(db, session.id, expected_enrollment.id, increment=True)
+        manual_required = attempt_count >= attempt_limit
+    elif expected_enrollment is not None:
+        attempt_count = _attempt_count(db, session.id, expected_enrollment.id)
     db.commit()
     log_face_event("identification.completed", result_status=event.result_status, capture_count=len(captured_frames), scan_event_created=True, new_mark=bool(new_mark))
     candidate = None
@@ -458,7 +520,192 @@ async def identify_student(
         "score_aggregation": "mean_of_best_two_capture_scores",
         "provisional_present_count": session.present_count, "new_unique_mark": new_mark,
         "teacher_confirmation_required": True, "message": message,
+        "attempt_count": attempt_count, "attempt_limit": attempt_limit if expected_enrollment is not None else None,
+        "manual_required": manual_required,
     }
+
+
+
+def _current_unconfirmed_enrollment_id(db: Session, session: AttendanceSession) -> UUID | None:
+    has_confirmed_mark = select(AttendanceSessionMark.id).where(
+        AttendanceSessionMark.session_id == session.id,
+        AttendanceSessionMark.enrollment_id == StudentClassEnrollment.id,
+        AttendanceSessionMark.is_confirmed.is_(True),
+    ).exists()
+    return db.scalar(
+        select(StudentClassEnrollment.id)
+        .join(Student, Student.id == StudentClassEnrollment.student_id)
+        .where(
+            StudentClassEnrollment.class_id == session.class_id,
+            StudentClassEnrollment.enrollment_status == "ACTIVE",
+            Student.status == "ACTIVE",
+            ~has_confirmed_mark,
+        )
+        .order_by(StudentClassEnrollment.roll_number)
+        .limit(1)
+    )
+
+@router.get("/attendance/sessions/{session_id}/verification-progress")
+def attendance_verification_progress(session_id: UUID, identity: Identity = Depends(require_teacher), db: Session = Depends(get_db)):
+    session = _get_session_for_teacher(db, session_id, identity.user.id)
+    settings = get_school_operations_settings(db)
+    attempt_limit = int(settings["face_verification_attempt_limit"])
+    include_details = bool(settings["student_information_enabled"])
+    active_template = select(StudentFaceTemplate.id).where(
+        StudentFaceTemplate.student_id == Student.id,
+        StudentFaceTemplate.is_active.is_(True),
+    ).exists()
+    rows = db.execute(
+        select(StudentClassEnrollment, Student, AttendanceSessionMark, AttendanceVerificationAttempt, active_template)
+        .join(Student, Student.id == StudentClassEnrollment.student_id)
+        .outerjoin(AttendanceSessionMark, (AttendanceSessionMark.session_id == session.id) & (AttendanceSessionMark.enrollment_id == StudentClassEnrollment.id))
+        .outerjoin(AttendanceVerificationAttempt, (AttendanceVerificationAttempt.session_id == session.id) & (AttendanceVerificationAttempt.enrollment_id == StudentClassEnrollment.id))
+        .where(
+            StudentClassEnrollment.class_id == session.class_id,
+            StudentClassEnrollment.enrollment_status == "ACTIVE",
+            Student.status == "ACTIVE",
+        )
+        .order_by(StudentClassEnrollment.roll_number)
+    ).all()
+    students = []
+    current = None
+    for enrollment, student, mark, attempts, face_enrolled in rows:
+        attempt_count = attempts.attempt_count if attempts else 0
+        item = {
+            "student_id": str(student.id), "enrollment_id": str(enrollment.id),
+            "full_name": student.full_name, "roll_number": enrollment.roll_number,
+            "face_enrolled": bool(face_enrolled), "attempt_count": attempt_count,
+            "attempt_limit": attempt_limit, "attendance_status": mark.status if mark else None,
+            "attendance_confirmed": bool(mark.is_confirmed) if mark else False,
+            "attendance_source": mark.source if mark else None,
+        }
+        students.append(item)
+        if current is None and not (mark and mark.is_confirmed):
+            current = item
+    manual_required = bool(current and (not current["face_enrolled"] or current["attempt_count"] >= attempt_limit))
+    return {
+        "session_id": str(session.id), "attempt_limit": attempt_limit,
+        "student_information_enabled": include_details,
+        "total_students": len(students),
+        "confirmed_students": sum(1 for item in students if item["attendance_confirmed"]),
+        "current_student": current,
+        "manual_required": manual_required,
+        "students": students,
+    }
+
+
+@router.get("/attendance/sessions/{session_id}/students/lookup")
+def lookup_attendance_student(
+    session_id: UUID, request: Request, q: str = Query(min_length=1, max_length=180),
+    identity: Identity = Depends(require_teacher), db: Session = Depends(get_db),
+):
+    session = _get_session_for_teacher(db, session_id, identity.user.id)
+    search = q.strip()
+    if not search:
+        return {"items": []}
+    current_enrollment_id = _current_unconfirmed_enrollment_id(db, session)
+    if current_enrollment_id is None:
+        return {"items": []}
+    rows = db.execute(
+        select(Student, StudentClassEnrollment)
+        .join(StudentClassEnrollment, StudentClassEnrollment.student_id == Student.id)
+        .where(
+            StudentClassEnrollment.class_id == session.class_id,
+            StudentClassEnrollment.id == current_enrollment_id,
+            StudentClassEnrollment.enrollment_status == "ACTIVE",
+            Student.status == "ACTIVE",
+            or_(Student.full_name.ilike(f"%{search}%"), StudentClassEnrollment.roll_number.ilike(f"%{search}%")),
+        )
+        .order_by(StudentClassEnrollment.roll_number)
+        .limit(10)
+    ).all()
+    include_details = bool(get_school_operations_settings(db)["student_information_enabled"])
+    items = []
+    for student, enrollment in rows:
+        item = {
+            "student_id": str(student.id), "enrollment_id": str(enrollment.id),
+            "full_name": student.full_name, "roll_number": enrollment.roll_number,
+        }
+        if include_details:
+            item.update({
+                "father_name": student.father_name,
+                "mother_name": student.mother_name,
+                "guardian_phone": student.guardian_phone,
+                "alternate_guardian_phone": student.alternate_guardian_phone,
+            })
+        items.append(item)
+    return {"items": items}
+
+
+@router.post("/attendance/sessions/{session_id}/confirm-face/{enrollment_id}")
+def confirm_face_attendance(
+    session_id: UUID, enrollment_id: UUID, request: Request,
+    identity: Identity = Depends(require_teacher), db: Session = Depends(get_db),
+):
+    session = _get_session_for_teacher(db, session_id, identity.user.id, lock=True)
+    if session.status not in {"OPEN", "REOPENED"}:
+        raise error("SESSION_NOT_OPEN", "Face confirmations are available only while scanning is open.", 409)
+    if _current_unconfirmed_enrollment_id(db, session) != enrollment_id:
+        raise error("NOT_CURRENT_STUDENT", "Confirm students in roll-number order. Only the current unconfirmed student can be confirmed here.", 409)
+    mark = db.scalar(select(AttendanceSessionMark).where(
+        AttendanceSessionMark.session_id == session.id,
+        AttendanceSessionMark.enrollment_id == enrollment_id,
+    ).with_for_update())
+    if mark is None or mark.source != "FACE":
+        raise error("FACE_CANDIDATE_NOT_FOUND", "No face candidate is waiting for confirmation.", 404)
+    mark.is_confirmed = True
+    mark.updated_by_user_id = identity.user.id
+    mark.updated_at = utcnow()
+    add_audit(db, actor_user_id=identity.user.id, action="FACE_ATTENDANCE_CONFIRMED", entity_type="attendance_session", entity_id=session.id,
+              metadata={"enrollment_id": str(enrollment_id)})
+    db.commit()
+    return {"session_id": str(session.id), "enrollment_id": str(enrollment_id), "status": mark.status, "confirmed": True}
+
+
+@router.post("/attendance/sessions/{session_id}/manual-confirm/{enrollment_id}")
+def manual_confirm_attendance(
+    session_id: UUID, enrollment_id: UUID, payload: ManualAttendanceConfirmRequest,
+    identity: Identity = Depends(require_teacher), db: Session = Depends(get_db),
+):
+    session = _get_session_for_teacher(db, session_id, identity.user.id, lock=True)
+    if session.status not in {"OPEN", "REOPENED"}:
+        raise error("SESSION_NOT_OPEN", "Manual verification is available only while scanning is open.", 409)
+    current_enrollment_id = _current_unconfirmed_enrollment_id(db, session)
+    if current_enrollment_id != enrollment_id:
+        raise error("NOT_CURRENT_STUDENT", "Verify students in roll-number order. Only the current unconfirmed student can be marked here.", 409)
+    enrollment = db.scalar(select(StudentClassEnrollment).where(
+        StudentClassEnrollment.id == enrollment_id,
+        StudentClassEnrollment.class_id == session.class_id,
+        StudentClassEnrollment.enrollment_status == "ACTIVE",
+    ))
+    if enrollment is None:
+        raise error("ENROLLMENT_NOT_FOUND", "The selected student is not enrolled in this attendance class.", 404)
+    mark = db.scalar(select(AttendanceSessionMark).where(
+        AttendanceSessionMark.session_id == session.id,
+        AttendanceSessionMark.enrollment_id == enrollment_id,
+    ).with_for_update())
+    if mark and mark.is_confirmed:
+        raise error("STUDENT_ALREADY_CONFIRMED", "This student's attendance has already been confirmed.", 409)
+    if mark is None:
+        mark = AttendanceSessionMark(
+            session_id=session.id, enrollment_id=enrollment_id, status=payload.status,
+            source="MANUAL", is_confirmed=True, updated_by_user_id=identity.user.id,
+        )
+        db.add(mark)
+    else:
+        mark.status = payload.status
+        mark.source = "MANUAL"
+        mark.is_confirmed = True
+        mark.updated_by_user_id = identity.user.id
+        mark.updated_at = utcnow()
+    session.present_count = db.scalar(select(func.count()).select_from(AttendanceSessionMark).where(
+        AttendanceSessionMark.session_id == session.id,
+        AttendanceSessionMark.status.in_(["PRESENT", "LATE"]),
+    )) or 0
+    add_audit(db, actor_user_id=identity.user.id, action="ATTENDANCE_MANUALLY_VERIFIED", entity_type="attendance_session", entity_id=session.id,
+              metadata={"enrollment_id": str(enrollment_id), "status": payload.status})
+    db.commit()
+    return {"session_id": str(session.id), "enrollment_id": str(enrollment_id), "status": payload.status, "confirmed": True}
 
 
 @router.get("/attendance/sessions/{session_id}/review")

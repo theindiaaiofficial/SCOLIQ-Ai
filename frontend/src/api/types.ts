@@ -27,7 +27,11 @@ export type SchoolProfile = SchoolBranding & {
   school_code: string | null;
   timezone: string;
   current_academic_year: string;
-  settings?: Record<string, unknown>;
+  settings?: {
+    student_information_enabled: boolean;
+    face_verification_attempt_limit: 3 | 5;
+    [key: string]: unknown;
+  };
 };
 
 export type Principal = { id: string; full_name: string; email: string; role: 'PRINCIPAL' };
@@ -67,6 +71,10 @@ export type Student = {
   status: string;
   consent_status: 'PENDING' | 'GRANTED' | 'WITHDRAWN';
   face_enrolled: boolean;
+  father_name?: string | null;
+  mother_name?: string | null;
+  guardian_phone?: string | null;
+  alternate_guardian_phone?: string | null;
 };
 export type PageResult<T> = { items: T[]; page: number; page_size: number; total: number };
 export type TeacherRequest = {
@@ -177,4 +185,35 @@ export type FaceIdentifyResult = {
   new_unique_mark: boolean;
   teacher_confirmation_required: boolean;
   message: string;
+  attempt_count: number | null;
+  attempt_limit: number | null;
+  manual_required: boolean;
+};
+
+export type AttendanceVerificationStudent = {
+  student_id: string;
+  enrollment_id: string;
+  full_name: string;
+  roll_number: string;
+  face_enrolled: boolean;
+  attempt_count: number;
+  attempt_limit: number;
+  attendance_status: string | null;
+  attendance_confirmed: boolean;
+  attendance_source: string | null;
+  father_name?: string | null;
+  mother_name?: string | null;
+  guardian_phone?: string | null;
+  alternate_guardian_phone?: string | null;
+};
+
+export type AttendanceVerificationProgress = {
+  session_id: string;
+  attempt_limit: number;
+  student_information_enabled: boolean;
+  total_students: number;
+  confirmed_students: number;
+  current_student: AttendanceVerificationStudent | null;
+  manual_required: boolean;
+  students: AttendanceVerificationStudent[];
 };
