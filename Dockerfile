@@ -27,4 +27,4 @@ COPY --chown=app:app models/face ./models/face
 COPY --from=frontend-build --chown=app:app /build/frontend/dist ./frontend/dist
 USER app
 EXPOSE 8000
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
